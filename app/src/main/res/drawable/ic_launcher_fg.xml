@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- 自适应图标前景：话筒图形，画在中间 72dp 安全区内 -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="108dp"
+    android:height="108dp"
+    android:viewportWidth="108"
+    android:viewportHeight="108">
+    <path
+        android:fillColor="#FFFFFFFF"
+        android:pathData="M54,30a6,6 0,0 0,-6 6v18a6,6 0,0 0,12 0V36a6,6 0,0 0,-6 -6z" />
+    <path
+        android:fillColor="#FFFFFFFF"
+        android:pathData="M66,50v4a12,12 0,0 1,-24 0v-4h-4v4a16,16 0,0 0,14 15.87V78h-8v4h20v-4h-8v-8.13A16,16 0,0 0,70 54v-4z" />
+</vector>

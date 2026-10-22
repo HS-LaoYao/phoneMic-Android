@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">phoneMic</string>
+    <string name="subtitle">手机当电脑麦克风</string>
+
+    <string name="label_mode">模式</string>
+    <string name="mode_hold">长按说话（按住才录音，松手立即停）</string>
+    <string name="mode_toggle">点按常开（点一下开始，再点一下停）</string>
+
+    <string name="label_pc">电脑</string>
+    <string name="btn_search">重新搜索</string>
+
+    <string name="label_level">音量</string>
+    <string name="btn_stop">停止服务</string>
+</resources>
