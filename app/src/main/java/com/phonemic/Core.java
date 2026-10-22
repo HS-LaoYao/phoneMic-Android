@@ -249,9 +249,8 @@ public final class Core {
                             if (now - lastHb >= 1000) { sendHeartbeat(); lastHb = now; }
                             sleep(60);
                         }
-                    } catch (InterruptedException ie) {
-                        break;
                     } catch (Exception e) {
+                        // 读音频偶发错误（设备被抢占等），记一下继续跑，别中断整条链路
                         Log.w(TAG, "音频循环异常", e);
                         sleep(60);
                     }
