@@ -56,9 +56,10 @@ public final class Core {
     private int seq = 0;
 
     private Thread audioThread;
-    private Thread discoverThread;
+    private Thread netThread;
     private AudioRecord rec;
     private long lastStateNotify = 0;
+    private volatile long lastAckAt = 0;
 
     private Core() { }
 
@@ -76,7 +77,7 @@ public final class Core {
             return;
         }
         running = true;
-        startDiscover();
+        startNet();
         startAudio();
         setState(ST_SEARCHING);
     }
@@ -91,7 +92,7 @@ public final class Core {
         pcIp = "";
         pcName = "";
         if (audioThread != null) { audioThread.interrupt(); audioThread = null; }
-        if (discoverThread != null) { discoverThread.interrupt(); discoverThread = null; }
+        if (netThread != null) { netThread.interrupt(); netThread = null; }
         setState(ST_IDLE);
     }
 
@@ -152,45 +153,85 @@ public final class Core {
 
     // ==================== 设备发现 ====================
 
-    private void startDiscover() {
-        discoverThread = new Thread(new Runnable() {
+    /**
+     * 网络主循环：没连上就广播找电脑；连上后每秒发心跳并等待电脑应答。
+     * 3 秒收不到应答就判定电脑掉线，回到搜索状态 —— 否则电脑关了手机上还显示「已连接」。
+     */
+    private void startNet() {
+        netThread = new Thread(new Runnable() {
             @Override
             public void run() {
                 byte[] req = new byte[]{Proto.T_DISCOVER};
                 byte[] buf = new byte[256];
-                while (running) {
-                    if (pcAddr != null) {
-                        sleep(800);
-                        continue;
-                    }
-                    try {
-                        sendTo(req, req.length, InetAddress.getByName("255.255.255.255"));
-                        InetAddress sub = subnetBroadcast();
-                        if (sub != null) sendTo(req, req.length, sub);
+                long lastDiscover = 0, lastHb = 0;
 
-                        sock.setSoTimeout(600);
-                        long end = System.currentTimeMillis() + 900;
-                        while (running && pcAddr == null && System.currentTimeMillis() < end) {
-                            DatagramPacket p = new DatagramPacket(buf, buf.length);
-                            sock.receive(p);
-                            if (p.getLength() >= 2 && buf[0] == Proto.T_DISCOVER_ACK) {
-                                int len = Math.min(buf[1] & 0xFF, p.getLength() - 2);
-                                pcName = new String(buf, 2, len, "UTF-8");
-                                pcAddr = p.getAddress();
-                                pcIp = pcAddr.getHostAddress();
-                                Log.i(TAG, "找到电脑 " + pcName + " @ " + pcIp);
-                                if (ctx != null) Prefs.setLastIp(ctx, pcIp);
-                                setState(talking ? ST_TALKING : ST_CONNECTED);
+                while (running) {
+                    try {
+                        long now = System.currentTimeMillis();
+
+                        if (pcAddr == null) {
+                            if (now - lastDiscover > 1200) {
+                                lastDiscover = now;
+                                try {
+                                    sendTo(req, req.length, InetAddress.getByName("255.255.255.255"));
+                                    InetAddress sub = subnetBroadcast();
+                                    if (sub != null) sendTo(req, req.length, sub);
+                                } catch (Exception ignored) { }
+                            }
+                        } else {
+                            if (now - lastHb > 1000) {
+                                lastHb = now;
+                                sendHeartbeat();
+                            }
+                            if (lastAckAt > 0 && now - lastAckAt > 3000) {
+                                Log.i(TAG, "电脑 3 秒没应答，判定掉线");
+                                dropConnection();
+                                continue;
                             }
                         }
-                    } catch (Exception ignored) {
-                        // 超时是常态，继续下一轮
+
+                        DatagramSocket s = sock;
+                        if (s == null) { sleep(100); continue; }
+                        s.setSoTimeout(200);
+                        DatagramPacket p = new DatagramPacket(buf, buf.length);
+                        s.receive(p);
+                        int n = p.getLength();
+
+                        if (n >= 2 && buf[0] == Proto.T_DISCOVER_ACK && pcAddr == null) {
+                            int len = Math.min(buf[1] & 0xFF, n - 2);
+                            pcName = new String(buf, 2, len, "UTF-8");
+                            pcAddr = p.getAddress();
+                            pcIp = pcAddr.getHostAddress();
+                            lastAckAt = System.currentTimeMillis();
+                            Log.i(TAG, "找到电脑 " + pcName + " @ " + pcIp);
+                            if (ctx != null) Prefs.setLastIp(ctx, pcIp);
+                            setState(ST_CONNECTED);
+                        } else if (n >= 1 && buf[0] == Proto.T_ACK) {
+                            lastAckAt = System.currentTimeMillis();
+                        }
+                    } catch (java.net.SocketTimeoutException te) {
+                        // 正常，继续循环
+                    } catch (Exception e) {
+                        if (!running) break;
+                        sleep(100);
                     }
-                    sleep(1200);
                 }
             }
-        }, "discover");
-        discoverThread.start();
+        }, "net");
+        netThread.start();
+    }
+
+    /** 断开当前电脑，回到搜索状态 */
+    private void dropConnection() {
+        boolean was = talking;
+        talking = false;
+        if (was) releaseRecorder();
+        pcAddr = null;
+        pcIp = "";
+        pcName = "";
+        lastAckAt = 0;
+        setState(ST_SEARCHING);
+        postLevel(0f);
     }
 
     /** 由本机 IP 推一个 /24 广播地址（很多路由器不放行 255.255.255.255） */
@@ -231,11 +272,9 @@ public final class Core {
             @Override
             public void run() {
                 byte[] buf = new byte[Proto.FRAME_BYTES];
-                long lastHb = 0;
                 while (running) {
                     try {
                         if (pcAddr == null) { sleep(150); continue; }
-                        long now = System.currentTimeMillis();
                         if (talking) {
                             if (!ensureRecorder()) { sleep(120); continue; }
                             int n = rec.read(buf, 0, buf.length);
@@ -243,10 +282,8 @@ public final class Core {
                                 sendAudio(buf, n);
                                 postLevel(levelOf(buf, n));
                             }
-                            if (now - lastHb >= 1000) { sendHeartbeat(); lastHb = now; }
                         } else {
                             releaseRecorder();
-                            if (now - lastHb >= 1000) { sendHeartbeat(); lastHb = now; }
                             sleep(60);
                         }
                     } catch (Exception e) {

@@ -43,8 +43,6 @@ public class MainActivity extends Activity implements Core.Listener {
     private RadioButton rbHold, rbToggle;
     private RadioGroup rgMode;
 
-    private boolean startingService = false;
-
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
@@ -130,9 +128,9 @@ public class MainActivity extends Activity implements Core.Listener {
     }
 
     private void startServiceOnce() {
-        if (startingService) return;
-        startingService = true;
-        MicService.start(this);
+        // 用 Core 的真实运行状态判断，而不是一个一次性的布尔：
+        // 否则用户点过「停止服务」后再回到 App，服务就再也起不来了。
+        if (!Core.get().isRunning()) MicService.start(this);
     }
 
     // ==================== 模式 ====================

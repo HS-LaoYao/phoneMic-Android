@@ -13,6 +13,7 @@ public final class Proto {
     public static final byte T_PTT_DOWN = 0x10;     // 说话开始
     public static final byte T_PTT_UP = 0x11;       // 说话结束
     public static final byte T_HEARTBEAT = 0x12;    // [12][mode] 每秒
+    public static final byte T_ACK = 0x22;          // 电脑对心跳的应答 [22]
     public static final byte T_DISCOVER = 0x20;     // 广播找电脑
     public static final byte T_DISCOVER_ACK = 0x21; // [21][nameLen][name]
 
