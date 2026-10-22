@@ -33,6 +33,7 @@ public class MainActivity extends Activity implements Core.Listener {
     private static final int C_RED = 0xFFC0392B;
     private static final int C_AMBER = 0xFF8A6D1F;
     private static final int C_BTN_IDLE = 0xFF2A333D;
+    private static final int C_CARD = 0xFF1B222A;
 
     private static final int REQ_PERM = 100;
 
@@ -63,6 +64,10 @@ public class MainActivity extends Activity implements Core.Listener {
 
         setupMode();
         setupTalkButton();
+
+        // 小按钮统一做个圆角，比系统默认的方块好看一点
+        findViewById(R.id.btnSearch).setBackground(round(C_CARD, 10));
+        findViewById(R.id.btnStop).setBackground(round(C_CARD, 12));
 
         findViewById(R.id.btnSearch).setOnClickListener(new View.OnClickListener() {
             @Override
@@ -268,6 +273,14 @@ public class MainActivity extends Activity implements Core.Listener {
 
     private float dp(float v) {
         return v * getResources().getDisplayMetrics().density;
+    }
+
+    /** 圆角矩形背景 */
+    private GradientDrawable round(int color, float radiusDp) {
+        GradientDrawable d = new GradientDrawable();
+        d.setCornerRadius(dp(radiusDp));
+        d.setColor(color);
+        return d;
     }
 
     private void toast(String s) {
