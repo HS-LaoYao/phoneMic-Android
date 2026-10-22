@@ -51,6 +51,8 @@ public final class Core {
     private volatile String pcIp = "";
     private volatile int state = ST_IDLE;
     private volatile boolean talking = false;
+    /** 用户点了「开始」但当时还没连上电脑 —— 先记下来，连上后自动生效 */
+    private volatile boolean wantTalk = false;
     private volatile boolean running = false;
     private int mode = Proto.MODE_HOLD;
     private int seq = 0;
@@ -85,6 +87,7 @@ public final class Core {
     public void stop() {
         running = false;
         talking = false;
+        wantTalk = false;
         releaseRecorder();
         try { if (sock != null) sock.close(); } catch (Exception ignored) { }
         sock = null;
@@ -135,9 +138,12 @@ public final class Core {
 
     /**
      * 开始 / 停止说话。
-     * 没连上电脑时忽略（否则会白白开麦）。
+     *
+     * 没连上电脑时**不再直接丢弃**：把意图记下来（wantTalk），
+     * 等连上的那一刻自动开始。否则用户点「开始」没反应，以为程序坏了。
      */
     public void setTalking(boolean on) {
+        wantTalk = on;
         if (pcAddr == null) return;
         if (talking == on) return;
         talking = on;
@@ -150,6 +156,8 @@ public final class Core {
         }
         setState(on ? ST_TALKING : ST_CONNECTED);
     }
+
+    public boolean isWantTalk() { return wantTalk; }
 
     // ==================== 设备发现 ====================
 
@@ -183,8 +191,10 @@ public final class Core {
                                 lastHb = now;
                                 sendHeartbeat();
                             }
-                            if (lastAckAt > 0 && now - lastAckAt > 3000) {
-                                Log.i(TAG, "电脑 3 秒没应答，判定掉线");
+                            // 电脑 6 秒没应答才判定掉线。原来 3 秒太激进，
+                            // 电脑那边一忙（比如正在开音频流）就会误判断线，导致反复重连。
+                            if (lastAckAt > 0 && now - lastAckAt > 6000) {
+                                Log.i(TAG, "电脑 6 秒没应答，判定掉线");
                                 dropConnection();
                                 continue;
                             }
@@ -206,6 +216,13 @@ public final class Core {
                             Log.i(TAG, "找到电脑 " + pcName + " @ " + pcIp);
                             if (ctx != null) Prefs.setLastIp(ctx, pcIp);
                             setState(ST_CONNECTED);
+
+                            // 之前点过「开始」但当时没连上（或断线前正在说）→ 现在补上
+                            if (wantTalk) {
+                                talking = true;
+                                sendCtrl(Proto.T_PTT_DOWN);
+                                setState(ST_TALKING);
+                            }
                         } else if (n >= 1 && buf[0] == Proto.T_ACK) {
                             lastAckAt = System.currentTimeMillis();
                         }

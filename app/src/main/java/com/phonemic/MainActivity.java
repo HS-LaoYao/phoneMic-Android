@@ -189,7 +189,12 @@ public class MainActivity extends Activity implements Core.Listener {
             @Override
             public void onClick(View v) {
                 if (Core.get().getMode() != Proto.MODE_TOGGLE) return;
-                if (!connected() && !Core.get().isTalking()) { toast("还没连上电脑"); return; }
+                if (!connected() && !Core.get().isTalking()) {
+                    // 还没连上就先记下意图，连上后自动开始（否则点了没反应，像坏了）
+                    Core.get().setTalking(true);
+                    toast("还没连上电脑，连上后会自动开始录音");
+                    return;
+                }
                 Core.get().setTalking(!Core.get().isTalking());
             }
         });

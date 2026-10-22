@@ -1,0 +1,12 @@
+# 构建产物
+.gradle/
+build/
+app/build/
+*.apk
+*.aab
+
+# 本机环境
+local.properties
+.idea/
+*.iml
+.DS_Store
