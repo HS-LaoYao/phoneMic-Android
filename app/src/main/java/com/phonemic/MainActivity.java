@@ -34,6 +34,7 @@ public class MainActivity extends Activity implements Core.Listener {
     private static final int C_AMBER = 0xFF8A6D1F;
     private static final int C_BTN_IDLE = 0xFF2A333D;
     private static final int C_CARD = 0xFF1B222A;
+    private static final int C_ACCENT = 0xFF3FA7FF;
 
     private static final int REQ_PERM = 100;
 
@@ -43,6 +44,10 @@ public class MainActivity extends Activity implements Core.Listener {
     private ProgressBar level;
     private RadioButton rbHold, rbToggle;
     private RadioGroup rgMode;
+    private Button btnService;
+
+    /** 用户希望服务是开着的吗（点过停止就是 false，回到前台时不再自动拉起） */
+    private boolean serviceWanted = true;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -77,12 +82,23 @@ public class MainActivity extends Activity implements Core.Listener {
             }
         });
 
-        findViewById(R.id.btnStop).setOnClickListener(new View.OnClickListener() {
+        btnService = findViewById(R.id.btnStop);
+        btnService.setOnClickListener(new View.OnClickListener() {
             @Override
             public void onClick(View v) {
-                Core.get().setTalking(false);
-                MicService.stop(MainActivity.this);
-                toast("已停止");
+                if (serviceWanted) {
+                    // 停：先停录音，再停前台服务
+                    serviceWanted = false;
+                    Core.get().setTalking(false);
+                    MicService.stop(MainActivity.this);
+                    toast("已停止");
+                } else {
+                    // 再启动（之前点过停止，或者被系统回收了）
+                    serviceWanted = true;
+                    MicService.start(MainActivity.this);
+                    toast("已启动，正在搜索电脑…");
+                }
+                refreshServiceButton();
             }
         });
 
@@ -93,8 +109,16 @@ public class MainActivity extends Activity implements Core.Listener {
     protected void onStart() {
         super.onStart();
         Core.get().addListener(this);
-        if (hasMic()) startServiceOnce();
+        if (hasMic() && serviceWanted) startServiceOnce();
         refreshModeHint();
+        refreshServiceButton();
+    }
+
+    /** 底部按钮在「启动服务 / 停止服务」之间切换 */
+    private void refreshServiceButton() {
+        if (btnService == null) return;
+        btnService.setText(serviceWanted ? "停止服务" : "启动服务");
+        btnService.setTextColor(serviceWanted ? C_SUB : C_ACCENT);
     }
 
     @Override
