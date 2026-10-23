@@ -1,4 +1,4 @@
-# phoneMic · Android 端 v1.0.1
+# phoneMic · Android 端 v1.0.2
 
 把手机变成电脑麦克风（和耳机）。配套电脑端见 `phoneMic-Windows`。
 

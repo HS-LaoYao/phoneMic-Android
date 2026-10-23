@@ -186,7 +186,9 @@ public final class Core {
             @Override
             public void run() {
                 byte[] req = new byte[]{Proto.T_DISCOVER};
-                byte[] buf = new byte[256];
+                // 收包缓冲必须比「一帧下行音频 + 包头」大：963 字节。
+                // 开小了 UDP 会把整包截断 —— 表现就是手机里只有滋滋的电流声、听不出音乐。
+                byte[] buf = new byte[Proto.AUDIO_HEADER + Proto.FRAME_BYTES + 64];
                 long lastDiscover = 0, lastHb = 0, lastPtt = 0;
 
                 while (running) {
@@ -422,6 +424,7 @@ public final class Core {
 
     private void enqueueDown(byte[] buf, int n) {
         int len = n - Proto.AUDIO_HEADER;
+        if (len <= 0 || len > Proto.FRAME_BYTES) return;   // 长度不对就整包丢掉，别把噪音混进去
         byte[] pcm = new byte[len];
         System.arraycopy(buf, Proto.AUDIO_HEADER, pcm, 0, len);
         if (!playQ.offer(pcm)) {          // 满了就丢最旧的，宁可断一下也不要越积越多
@@ -449,11 +452,23 @@ public final class Core {
         playThread = new Thread(new Runnable() {
             @Override
             public void run() {
+                boolean primed = false;
                 while (running) {
                     try {
                         byte[] data = playQ.take();
+
+                        // UDP 到达时间有抖动，收到一帧就立刻播会一卡一卡。
+                        // 先攒几帧再起播；队列被播空了就重新攒。
+                        if (!primed) {
+                            long t0 = System.currentTimeMillis();
+                            while (playQ.size() < 5 && running
+                                    && System.currentTimeMillis() - t0 < 500) sleep(2);
+                            primed = true;
+                        }
+
                         AudioTrack t = track;
                         if (t != null) t.write(data, 0, data.length);
+                        if (playQ.isEmpty()) primed = false;
                     } catch (InterruptedException ie) {
                         break;
                     } catch (Exception ignored) { }
