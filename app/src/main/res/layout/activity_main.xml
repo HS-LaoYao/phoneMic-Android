@@ -112,6 +112,24 @@
             android:textColor="@color/sub"
             android:textSize="11sp" />
 
+        <!-- ============ 播放电脑的声音（手机当耳机）============ -->
+        <CheckBox
+            android:id="@+id/chkRemote"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="14dp"
+            android:buttonTint="@color/accent"
+            android:text="@string/label_remote"
+            android:textColor="@color/text"
+            android:textSize="14sp" />
+
+        <TextView
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="@string/remote_hint"
+            android:textColor="@color/sub"
+            android:textSize="11sp" />
+
         <!-- ============ 电脑 ============ -->
         <TextView
             android:layout_width="wrap_content"

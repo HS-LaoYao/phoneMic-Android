@@ -2,7 +2,9 @@ package com.phonemic;
 
 import android.content.Context;
 import android.media.AudioFormat;
+import android.media.AudioManager;
 import android.media.AudioRecord;
+import android.media.AudioTrack;
 import android.media.MediaRecorder;
 import android.os.Handler;
 import android.os.Looper;
@@ -12,6 +14,7 @@ import java.net.DatagramPacket;
 import java.net.DatagramSocket;
 import java.net.InetAddress;
 import java.util.List;
+import java.util.concurrent.ArrayBlockingQueue;
 import java.util.concurrent.CopyOnWriteArrayList;
 
 /**
@@ -60,6 +63,13 @@ public final class Core {
     private Thread audioThread;
     private Thread netThread;
     private AudioRecord rec;
+
+    // 播放电脑传来的声音（模式③：手机当耳机）
+    private AudioTrack track;
+    private Thread playThread;
+    private final ArrayBlockingQueue<byte[]> playQ = new ArrayBlockingQueue<byte[]>(30);
+    private volatile boolean playRemote = true;
+
     private long lastStateNotify = 0;
     private volatile long lastAckAt = 0;
 
@@ -78,9 +88,11 @@ public final class Core {
             Log.e(TAG, "建 socket 失败", e);
             return;
         }
+        playRemote = Prefs.getPlayRemote(ctx);
         running = true;
         startNet();
         startAudio();
+        startPlayback();
         setState(ST_SEARCHING);
     }
 
@@ -89,6 +101,7 @@ public final class Core {
         talking = false;
         wantTalk = false;
         releaseRecorder();
+        stopPlayback();
         try { if (sock != null) sock.close(); } catch (Exception ignored) { }
         sock = null;
         pcAddr = null;
@@ -225,6 +238,8 @@ public final class Core {
                             }
                         } else if (n >= 1 && buf[0] == Proto.T_ACK) {
                             lastAckAt = System.currentTimeMillis();
+                        } else if (n > Proto.AUDIO_HEADER && buf[0] == Proto.T_AUDIO_DOWN) {
+                            if (playRemote) enqueueDown(buf, n);
                         }
                     } catch (java.net.SocketTimeoutException te) {
                         // 正常，继续循环
@@ -383,6 +398,70 @@ public final class Core {
         DatagramSocket s = sock;
         if (s == null || addr == null) return;
         s.send(new DatagramPacket(data, len, addr, Proto.PORT));
+    }
+
+    // ==================== 播放电脑的声音（模式③）====================
+
+    public boolean isPlayRemote() { return playRemote; }
+
+    public void setPlayRemote(boolean on) {
+        playRemote = on;
+        if (ctx != null) Prefs.setPlayRemote(ctx, on);
+        if (!on) playQ.clear();
+    }
+
+    private void enqueueDown(byte[] buf, int n) {
+        int len = n - Proto.AUDIO_HEADER;
+        byte[] pcm = new byte[len];
+        System.arraycopy(buf, Proto.AUDIO_HEADER, pcm, 0, len);
+        if (!playQ.offer(pcm)) {          // 满了就丢最旧的，宁可断一下也不要越积越多
+            playQ.poll();
+            playQ.offer(pcm);
+        }
+    }
+
+    private void startPlayback() {
+        if (playThread != null) return;
+        int min = AudioTrack.getMinBufferSize(Proto.SAMPLE_RATE,
+                AudioFormat.CHANNEL_OUT_MONO, AudioFormat.ENCODING_PCM_16BIT);
+        if (min <= 0) { Log.e(TAG, "设备不支持 48k 播放"); return; }
+        try {
+            track = new AudioTrack(AudioManager.STREAM_MUSIC, Proto.SAMPLE_RATE,
+                    AudioFormat.CHANNEL_OUT_MONO, AudioFormat.ENCODING_PCM_16BIT,
+                    Math.max(min, Proto.FRAME_BYTES * 8), AudioTrack.MODE_STREAM);
+            track.play();
+        } catch (Exception e) {
+            Log.e(TAG, "创建播放器失败", e);
+            track = null;
+            return;
+        }
+
+        playThread = new Thread(new Runnable() {
+            @Override
+            public void run() {
+                while (running) {
+                    try {
+                        byte[] data = playQ.take();
+                        AudioTrack t = track;
+                        if (t != null) t.write(data, 0, data.length);
+                    } catch (InterruptedException ie) {
+                        break;
+                    } catch (Exception ignored) { }
+                }
+            }
+        }, "playback");
+        playThread.start();
+    }
+
+    private void stopPlayback() {
+        playQ.clear();
+        if (playThread != null) { playThread.interrupt(); playThread = null; }
+        AudioTrack t = track;
+        track = null;
+        if (t != null) {
+            try { t.stop(); } catch (Exception ignored) { }
+            try { t.release(); } catch (Exception ignored) { }
+        }
     }
 
     // ==================== 电平 ====================

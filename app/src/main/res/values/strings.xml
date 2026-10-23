@@ -10,6 +10,9 @@
     <string name="label_pc">电脑</string>
     <string name="btn_search">重新搜索</string>
 
+    <string name="label_remote">播放电脑的声音</string>
+    <string name="remote_hint">打开后：电脑放视频/音乐，手机里听得到（手机当耳机）</string>
+
     <string name="label_level">音量</string>
     <string name="btn_stop">停止服务</string>
 </resources>

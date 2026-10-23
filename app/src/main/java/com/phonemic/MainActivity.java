@@ -11,6 +11,7 @@ import android.os.Bundle;
 import android.view.MotionEvent;
 import android.view.View;
 import android.widget.Button;
+import android.widget.CheckBox;
 import android.widget.LinearLayout;
 import android.widget.ProgressBar;
 import android.widget.RadioButton;
@@ -99,6 +100,17 @@ public class MainActivity extends Activity implements Core.Listener {
                     toast("已启动，正在搜索电脑…");
                 }
                 refreshServiceButton();
+            }
+        });
+
+        // 是否播放电脑传来的声音（手机当耳机）
+        CheckBox chkRemote = findViewById(R.id.chkRemote);
+        chkRemote.setChecked(Core.get().isPlayRemote());
+        chkRemote.setOnCheckedChangeListener(new android.widget.CompoundButton.OnCheckedChangeListener() {
+            @Override
+            public void onCheckedChanged(android.widget.CompoundButton v, boolean checked) {
+                Core.get().setPlayRemote(checked);
+                toast(checked ? "已开启：电脑的声音会从手机出来" : "已关闭：手机只当麦克风");
             }
         });
 

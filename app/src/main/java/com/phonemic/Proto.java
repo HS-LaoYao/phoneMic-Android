@@ -14,11 +14,13 @@ public final class Proto {
     public static final byte T_PTT_UP = 0x11;       // 说话结束
     public static final byte T_HEARTBEAT = 0x12;    // [12][mode] 每秒
     public static final byte T_ACK = 0x22;          // 电脑对心跳的应答 [22]
+    public static final byte T_AUDIO_DOWN = 0x02;   // 电脑→手机 的音频（手机当耳机时）
     public static final byte T_DISCOVER = 0x20;     // 广播找电脑
     public static final byte T_DISCOVER_ACK = 0x21; // [21][nameLen][name]
 
     public static final int SAMPLE_RATE = 48000;
     public static final int FRAME_BYTES = 960;      // 10ms 单声道 16bit
+    public static final int AUDIO_HEADER = 3;       // 音频包头：类型1 + 序号2
 
     public static final int MODE_HOLD = 0;          // 长按说话
     public static final int MODE_TOGGLE = 1;        // 点按常开
