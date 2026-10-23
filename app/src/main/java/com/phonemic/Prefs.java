@@ -28,6 +28,15 @@ final class Prefs {
         sp(c).edit().putBoolean("playRemote", on).apply();
     }
 
+    /** 发送键：Proto.SEND_ENTER / SEND_SHIFT_ENTER */
+    static int getSendKey(Context c) {
+        return sp(c).getInt("sendKey", Proto.SEND_ENTER);
+    }
+
+    static void setSendKey(Context c, int v) {
+        sp(c).edit().putInt("sendKey", v).apply();
+    }
+
     static String getLastIp(Context c) {
         return sp(c).getString("lastIp", "");
     }

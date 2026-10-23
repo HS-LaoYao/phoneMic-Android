@@ -59,6 +59,7 @@ public final class Core {
     private volatile boolean running = false;
     private int mode = Proto.MODE_HOLD;
     private int seq = 0;
+    private int sendKeySeq = 0;
 
     private Thread audioThread;
     private Thread netThread;
@@ -72,6 +73,10 @@ public final class Core {
 
     private long lastStateNotify = 0;
     private volatile long lastAckAt = 0;
+
+    // 录音时长：给界面显示「语音 3.2″」那种气泡用
+    private volatile long talkStartMs = 0;
+    private volatile long lastTalkMs = 0;
 
     private Core() { }
 
@@ -164,14 +169,27 @@ public final class Core {
         if (talking == on) return;
         talking = on;
         if (on) {
+            talkStartMs = System.currentTimeMillis();
             sendCtrl(Proto.T_PTT_DOWN);
         } else {
+            if (talkStartMs > 0) lastTalkMs = System.currentTimeMillis() - talkStartMs;
+            talkStartMs = 0;
             releaseRecorder();
             sendCtrl(Proto.T_PTT_UP);
             postLevel(0f);
         }
         setState(on ? ST_TALKING : ST_CONNECTED);
     }
+
+    /** 这一轮已经录了多久（毫秒）；没在录就返回上一次的时长 */
+    public long getTalkMillis() {
+        if (talking && talkStartMs > 0) return System.currentTimeMillis() - talkStartMs;
+        return lastTalkMs;
+    }
+
+    public boolean isRecordingNow() { return talking; }
+
+    public void clearTalkDuration() { lastTalkMs = 0; }
 
     public boolean isWantTalk() { return wantTalk; }
 
@@ -245,6 +263,7 @@ public final class Core {
                             // 之前点过「开始」但当时没连上（或断线前正在说）→ 现在补上
                             if (wantTalk) {
                                 talking = true;
+                                talkStartMs = System.currentTimeMillis();
                                 sendCtrl(Proto.T_PTT_DOWN);
                                 setState(ST_TALKING);
                             }
@@ -402,6 +421,41 @@ public final class Core {
     private void sendCtrl(byte type) {
         try {
             byte[] pkt = new byte[]{type};
+            sendTo(pkt, pkt.length, pcAddr);
+        } catch (Exception ignored) { }
+    }
+
+    // ==================== 发送键（让电脑按回车 / Shift+回车）====================
+
+    /**
+     * 点「发送」：让电脑按一次发送键，把语音转出来的文字发出去。
+     *
+     * 这里连发 3 次是**必须的** —— 单包 UDP 会丢（按键不触发那个问题就是这么来的），
+     * 但「发送」不能靠周期性重发兜底，否则会连发好几条消息。
+     * 所以三个包带**同一个 seq**，电脑端按 seq 去重：只会按一次。
+     */
+    public boolean sendKeyNow() {
+        if (pcAddr == null) return false;
+        final int s = (++sendKeySeq) & 0xFFFF;
+        new Thread(new Runnable() {
+            @Override
+            public void run() {
+                for (int i = 0; i < 3; i++) {
+                    sendSendKey(s);
+                    if (i < 2) sleep(40);
+                }
+            }
+        }, "send-key").start();
+        return true;
+    }
+
+    private void sendSendKey(int s) {
+        try {
+            int key = ctx != null ? Prefs.getSendKey(ctx) : Proto.SEND_ENTER;
+            byte[] pkt = new byte[]{
+                    Proto.T_SEND_KEY,
+                    (byte) ((s >> 8) & 0xFF), (byte) (s & 0xFF),
+                    (byte) key};
             sendTo(pkt, pkt.length, pcAddr);
         } catch (Exception ignored) { }
     }

@@ -14,6 +14,8 @@
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
     <!-- 息屏不断连 -->
     <uses-permission android:name="android.permission.WAKE_LOCK" />
+    <!-- 检查更新后直接装上新版本（Android 8+ 需要显式声明） -->
+    <uses-permission android:name="android.permission.REQUEST_INSTALL_PACKAGES" />
 
     <uses-feature
         android:name="android.hardware.microphone"
