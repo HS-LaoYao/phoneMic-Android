@@ -138,6 +138,9 @@ public final class Core {
 
     public boolean isRunning() { return running; }
 
+    /** 已经找到电脑了吗（比 state 更可靠，state 会在重连时抖动） */
+    public boolean hasPeer() { return pcAddr != null; }
+
     public String getPcIp() { return pcIp; }
 
     public String getPcName() { return pcName; }
@@ -184,7 +187,7 @@ public final class Core {
             public void run() {
                 byte[] req = new byte[]{Proto.T_DISCOVER};
                 byte[] buf = new byte[256];
-                long lastDiscover = 0, lastHb = 0;
+                long lastDiscover = 0, lastHb = 0, lastPtt = 0;
 
                 while (running) {
                     try {
@@ -203,6 +206,13 @@ public final class Core {
                             if (now - lastHb > 1000) {
                                 lastHb = now;
                                 sendHeartbeat();
+                            }
+                            // 说话期间反复重发「开始说话」。
+                            // 单包 UDP 一旦丢了，电脑就不知道该按键 —— 这是之前按键不触发的根因。
+                            // 电脑端按键是幂等的，重复收到不会出问题。
+                            if (talking && now - lastPtt > 400) {
+                                lastPtt = now;
+                                sendCtrl(Proto.T_PTT_DOWN);
                             }
                             // 电脑 6 秒没应答才判定掉线。原来 3 秒太激进，
                             // 电脑那边一忙（比如正在开音频流）就会误判断线，导致反复重连。

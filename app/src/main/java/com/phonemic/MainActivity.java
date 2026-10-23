@@ -237,8 +237,9 @@ public class MainActivity extends Activity implements Core.Listener {
     }
 
     private boolean connected() {
-        return Core.get().getState() == Core.ST_CONNECTED
-                || Core.get().getState() == Core.ST_TALKING;
+        // 用「有没有找到电脑」判断，不要用 state ——
+        // state 在重连时会短暂变成 SEARCHING，那时长按会被误判为「还没连上」而直接忽略。
+        return Core.get().hasPeer();
     }
 
     // ==================== 状态刷新 ====================
