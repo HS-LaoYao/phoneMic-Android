@@ -53,6 +53,11 @@ android {
         targetCompatibility = JavaVersion.VERSION_17
     }
 
+    // AGP 8 起 BuildConfig 默认不生成，而「关于」和「检查更新」要用它读版本号
+    buildFeatures {
+        buildConfig = true
+    }
+
     // 只是自用，lint 报错不要挡住构建
     lint {
         abortOnError = false
