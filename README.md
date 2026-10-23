@@ -1,6 +1,15 @@
-# phoneMic · Android 端 v1.0.2
+# phoneMic · Android 端 v1.0.4
 
 把手机变成电脑麦克风（和耳机）。配套电脑端见 `phoneMic-Windows`。
+
+## 下载
+
+发行版页面（APK + 更新日志）：
+
+- 码云　<https://gitee.com/heishanyao_admin/phoneMic-Android/releases>
+- GitHub　<https://github.com/HS-LaoYao/phoneMic-Android/releases>
+
+App 里右上角「⋮ → 检查更新」会自动比对码云上的最新版并下载安装。
 
 ## 功能
 
