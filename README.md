@@ -41,6 +41,8 @@
 ## 技术
 
 纯 Java，**零第三方依赖**（不使用 AndroidX / Compose / Kotlin），APK 约 30KB。
+APK 用固定密钥签名（`phonemic.jks`，密钥存在 CI 的仓库 Secret 里，不在代码库中），
+所以新版可以**直接覆盖安装**，不用先卸载旧的。
 最低 Android 8.0（API 26），Android 17 直接可用。
 通信：UDP 47810，裸 PCM 48kHz/16bit/单声道，10ms 一帧（960B）。
 
