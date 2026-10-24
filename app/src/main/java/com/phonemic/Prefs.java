@@ -28,5 +28,14 @@ final class Prefs {
         sp(c).edit().putInt("sendKey", v).apply();
     }
 
+    /** 电池优化白名单提醒过一次就够了，别每次开 App 都弹 */
+    static boolean getAskedBattery(Context c) {
+        return sp(c).getBoolean("askedBattery", false);
+    }
+
+    static void setAskedBattery(Context c, boolean v) {
+        sp(c).edit().putBoolean("askedBattery", v).apply();
+    }
+
     private Prefs() { }
 }

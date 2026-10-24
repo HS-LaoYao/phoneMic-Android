@@ -3,11 +3,15 @@ package com.phonemic;
 import android.Manifest;
 import android.app.Activity;
 import android.app.AlertDialog;
+import android.content.DialogInterface;
+import android.content.Intent;
 import android.content.pm.PackageManager;
 import android.graphics.drawable.GradientDrawable;
 import android.os.Build;
 import android.os.Bundle;
 import android.os.Handler;
+import android.os.PowerManager;
+import android.provider.Settings;
 import android.view.MenuItem;
 import android.view.MotionEvent;
 import android.view.View;
@@ -115,6 +119,38 @@ public class MainActivity extends Activity implements Core.Listener {
         refreshModeHint();
         applyState(Core.get().getState());
         refreshSendKeyLabel();
+        askBatteryWhitelist();
+    }
+
+    /**
+     * 息屏 / 静置后系统会冻住后台进程（国产 ROM 的省电策略尤其狠），
+     * 心跳发不出去就会被手机自己判成掉线。持锁只能缓解，
+     * 加到电池优化白名单里才彻底 —— 只提醒一次。
+     */
+    private void askBatteryWhitelist() {
+        if (Prefs.getAskedBattery(this)) return;
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.M) return;
+        PowerManager pm = (PowerManager) getSystemService(POWER_SERVICE);
+        if (pm == null || pm.isIgnoringBatteryOptimizations(getPackageName())) return;
+        Prefs.setAskedBattery(this, true);
+        new AlertDialog.Builder(this)
+                .setTitle("让后台保持连接")
+                .setMessage("息屏之后，系统可能会掐掉手机和电脑之间的连接"
+                        + "（表现是每隔几十秒重连一次、切模式提示没连上）。\n\n"
+                        + "建议把 phoneMic 设成「不受电池优化限制」。")
+                .setPositiveButton("去设置", new DialogInterface.OnClickListener() {
+                    @Override
+                    public void onClick(DialogInterface d, int w) {
+                        try {
+                            startActivity(new Intent(
+                                    Settings.ACTION_IGNORE_BATTERY_OPTIMIZATION_SETTINGS));
+                        } catch (Exception e) {
+                            toast("请到系统设置里搜索「电池优化」");
+                        }
+                    }
+                })
+                .setNegativeButton("以后再说", null)
+                .show();
     }
 
     @Override
@@ -194,14 +230,33 @@ public class MainActivity extends Activity implements Core.Listener {
                 int m = checkedId == R.id.rbMic ? Proto.ROUTE_MIC
                         : checkedId == R.id.rbMonitor ? Proto.ROUTE_MONITOR
                         : Proto.ROUTE_HEADSET;
-                if (!Core.get().sendRouteMode(m)) {
-                    toast("还没连上电脑，连上后再切");
-                    routeSync = true;
-                    checkRouteRadio(Core.get().getRouteMode());
-                    routeSync = false;
+                // 没连上也不丢这次点击：Core 会把它记下来，连上后自动补发
+                if (!Core.get().requestRouteMode(m)) {
+                    toast("还没连上，先记下了：连上后自动切成「" + routeName(m) + "」");
                 }
             }
         });
+    }
+
+    private String routeName(int m) {
+        switch (m) {
+            case Proto.ROUTE_MONITOR: return getString(R.string.route_monitor);
+            case Proto.ROUTE_HEADSET: return getString(R.string.route_headset);
+            default: return getString(R.string.route_mic);
+        }
+    }
+
+    /** 手机自己发起的切换有结果了：成了就报一声，没成就把选项还原成电脑的真实模式 */
+    @Override
+    public void onRouteResult(int m, boolean ok) {
+        if (ok) {
+            toast("已切换：" + routeName(m));
+            return;
+        }
+        routeSync = true;
+        checkRouteRadio(Core.get().getRouteMode());
+        routeSync = false;
+        toast("电脑没响应，已还原为：" + routeName(Core.get().getRouteMode()));
     }
 
     private void checkRouteRadio(int m) {

@@ -8,8 +8,10 @@ import android.app.Service;
 import android.content.Context;
 import android.content.Intent;
 import android.content.pm.ServiceInfo;
+import android.net.wifi.WifiManager;
 import android.os.Build;
 import android.os.IBinder;
+import android.os.PowerManager;
 
 /**
  * 前台服务：让 App 切到后台或息屏后依然能收音频、发音频。
@@ -19,6 +21,14 @@ public class MicService extends Service implements Core.Listener {
 
     private static final String CHANNEL = "phonemic";
     private static final int NOTI_ID = 1001;
+
+    /**
+     * 息屏 / 静置之后系统会冻住后台进程（国产 ROM 的省电策略尤其狠），
+     * 心跳发不出去，手机就会把自己判成掉线、隔二三十秒重连一次。
+     * 前台服务挡不住这个，所以再持一把 CPU 锁 + Wi-Fi 锁，尽量保住这条链路。
+     */
+    private PowerManager.WakeLock wakeLock;
+    private WifiManager.WifiLock wifiLock;
 
     public static void start(Context c) {
         Intent i = new Intent(c, MicService.class);
@@ -46,15 +56,40 @@ public class MicService extends Service implements Core.Listener {
     @Override
     public int onStartCommand(Intent intent, int flags, int startId) {
         startForegroundCompat(buildNotification("正在启动…"));
+        acquireLocks();
         Core.get().start(this);
         return START_STICKY;
     }
 
     @Override
     public void onDestroy() {
+        releaseLocks();
         Core.get().removeListener(this);
         Core.get().stop();
         super.onDestroy();
+    }
+
+    private void acquireLocks() {
+        try {
+            PowerManager pm = (PowerManager) getSystemService(POWER_SERVICE);
+            wakeLock = pm.newWakeLock(PowerManager.PARTIAL_WAKE_LOCK, "phoneMic:link");
+            wakeLock.setReferenceCounted(false);
+            wakeLock.acquire();
+        } catch (Exception ignored) { }
+
+        try {
+            WifiManager wm = (WifiManager) getApplicationContext().getSystemService(WIFI_SERVICE);
+            wifiLock = wm.createWifiLock(WifiManager.WIFI_MODE_FULL_HIGH_PERF, "phoneMic:link");
+            wifiLock.setReferenceCounted(false);
+            wifiLock.acquire();
+        } catch (Exception ignored) { }
+    }
+
+    private void releaseLocks() {
+        try { if (wakeLock != null) wakeLock.release(); } catch (Exception ignored) { }
+        try { if (wifiLock != null) wifiLock.release(); } catch (Exception ignored) { }
+        wakeLock = null;
+        wifiLock = null;
     }
 
     @Override
@@ -77,6 +112,10 @@ public class MicService extends Service implements Core.Listener {
 
     @Override
     public void onLevel(float level) { }
+
+    /** 手机自己发起的模式切换有结果 —— 提示由界面给，服务不用管 */
+    @Override
+    public void onRouteResult(int routeMode, boolean ok) { }
 
     /** 电脑端那边切了模式 → 发一条即看即走的通知（本地点的不会有，ACK 值一致时不会触发到这里） */
     @Override

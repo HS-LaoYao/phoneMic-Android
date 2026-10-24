@@ -37,6 +37,11 @@ public final class Core {
         void onLevel(float level);
         /** 电脑端的路由模式变了（本地或远程切换都会通知，手机界面跟着同步） */
         void onRouteMode(int routeMode);
+        /**
+         * 手机端发起的模式切换有结果了：ok=true 电脑已确认，ok=false 等了太久、已放弃。
+         * 只给界面用（弹提示 / 把选项还原），前台服务不用管。
+         */
+        void onRouteResult(int routeMode, boolean ok);
     }
 
     private static Core instance;
@@ -75,7 +80,17 @@ public final class Core {
     /** 电脑端当前的路由模式（由心跳应答带回，电脑是唯一事实来源） */
     private volatile int routeMode = Proto.ROUTE_MIC;
 
+    /** 手机端点了某个模式、还没被电脑确认（0 = 没有待生效的请求） */
+    private volatile int pendingRoute = 0;
+    private int pendingTries = 0;
+    /** 待生效请求最多跟着心跳重发这么多次（约 6 秒），还没确认就放弃并还原界面 */
+    private static final int PENDING_MAX_TRIES = 6;
+
     private volatile long lastAckAt = 0;
+    /** 上次真的把心跳发出去的时刻：用来区分「电脑掉线」和「我们自己被系统冻住」 */
+    private volatile long lastHbSentAt = 0;
+    /** 连续这么久没收到应答才判掉线（原来是 6 秒，息屏被冻几秒就会误判） */
+    private static final long DROP_MS = 10000;
 
     // 录音时长：给界面显示「语音 3.2″」那种气泡用
     private volatile long talkStartMs = 0;
@@ -114,6 +129,10 @@ public final class Core {
         pcAddr = null;
         pcIp = "";
         pcName = "";
+        pendingRoute = 0;
+        pendingTries = 0;
+        lastAckAt = 0;
+        lastHbSentAt = 0;
         if (audioThread != null) { audioThread.interrupt(); audioThread = null; }
         if (netThread != null) { netThread.interrupt(); netThread = null; }
         setState(ST_IDLE);
@@ -229,6 +248,13 @@ public final class Core {
                             if (now - lastHb > 1000) {
                                 lastHb = now;
                                 sendHeartbeat();
+                                lastHbSentAt = now;
+                                // 有待生效的模式就搭着心跳一起重发，直到电脑的应答确认。
+                                // 单包 UDP 会丢，而「切换模式」是一次性指令，丢了就永远不生效。
+                                if (pendingRoute != 0) {
+                                    sendModeSet(pendingRoute);
+                                    if (++pendingTries >= PENDING_MAX_TRIES) failPending();
+                                }
                             }
                             // 说话期间反复重发「开始说话」。
                             // 单包 UDP 一旦丢了，电脑就不知道该按键 —— 这是之前按键不触发的根因。
@@ -237,10 +263,13 @@ public final class Core {
                                 lastPtt = now;
                                 sendCtrl(Proto.T_PTT_DOWN);
                             }
-                            // 电脑 6 秒没应答才判定掉线。原来 3 秒太激进，
-                            // 电脑那边一忙（比如正在开音频流）就会误判断线，导致反复重连。
-                            if (lastAckAt > 0 && now - lastAckAt > 6000) {
-                                Log.i(TAG, "电脑 6 秒没应答，判定掉线");
+                            // 掉线判定：必须「我们一直在正常发心跳」＋「电脑 10 秒没应答」才算真掉线。
+                            // 息屏之后系统会把进程冻住几秒（国产 ROM 的省电策略更狠），
+                            // 冻醒那一刻心跳和应答的时间戳是一起变旧的 —— 那不是电脑掉线。
+                            // 只看「多久没收到应答」就会把这种冻醒误判成掉线，
+                            // 表现就是每隔二三十秒自己把自己踢下线、重新搜一次电脑。
+                            if (lastAckAt > 0 && now - lastAckAt > DROP_MS && now - lastHbSentAt < 2000) {
+                                Log.i(TAG, "电脑 10 秒没应答，判定掉线");
                                 dropConnection();
                                 continue;
                             }
@@ -269,11 +298,16 @@ public final class Core {
                                 sendCtrl(Proto.T_PTT_DOWN);
                                 setState(ST_TALKING);
                             }
+                            // 没连上时点过模式切换 → 现在补发，别让用户白点一下
+                            if (pendingRoute != 0) {
+                                pendingTries = 0;
+                                sendModeSet(pendingRoute);
+                            }
                         } else if (n >= 1 && buf[0] == Proto.T_ACK) {
                             lastAckAt = System.currentTimeMillis();
                             // 应答第二字节是电脑端当前的路由模式：跟着它同步界面，
                             // 这样在电脑上手切模式，手机这边也会跟着变
-                            if (n >= 2) updateRouteMode(buf[1] & 0xFF);
+                            if (n >= 2) onAckMode(buf[1] & 0xFF);
                         } else if (n > Proto.AUDIO_HEADER && buf[0] == Proto.T_AUDIO_DOWN) {
                             enqueueDown(buf, n);
                         }
@@ -477,20 +511,62 @@ public final class Core {
     public int getRouteMode() { return routeMode; }
 
     /**
-     * 远程切换电脑端的路由模式（0x14）。
-     * 电脑每秒的心跳应答会带回真实模式（updateRouteMode），发错了会被纠正回来。
+     * 手机端请求切换电脑的路由模式（0x14）。
+     *
+     * 两个可靠性设计：
+     * 1. 单包 UDP 会丢，所以把请求记成 pendingRoute，搭着每秒的心跳重发，
+     *    直到心跳应答带回同样的模式才算确认（电脑端 SetMode 幂等，重复发无副作用）；
+     * 2. 没连上电脑时也不丢用户的操作 —— 记下来，等连上的那一刻自动补发。
+     *
+     * @return true 已经发出去了；false 还没连上（请求已记下，连上后自动生效）
      */
-    public boolean sendRouteMode(int m) {
-        if (pcAddr == null || m < 1 || m > 3) return false;
+    public boolean requestRouteMode(int m) {
+        if (m < 1 || m > 3) return false;
+        pendingRoute = m;
+        pendingTries = 0;
+        if (pcAddr == null) return false;
+        sendModeSet(m);
+        return true;
+    }
+
+    private void sendModeSet(int m) {
         try {
-            byte[] pkt = new byte[]{Proto.T_MODE_SET, (byte) m};
-            sendTo(pkt, pkt.length, pcAddr);
-            // 先记下来：界面已经是用户点的状态了，等 ACK 带回同样的值就不再重复通知
+            sendTo(new byte[]{Proto.T_MODE_SET, (byte) m}, 2, pcAddr);
+        } catch (Exception ignored) { }
+    }
+
+    /** 心跳应答带回的模式：要么确认了手机的请求，要么是电脑那边自己切的 */
+    private void onAckMode(int m) {
+        if (m < 1 || m > 3) return;
+        if (pendingRoute != 0) {
+            // 请求还在路上：先记下电脑的真实模式，但不通知界面 ——
+            // 否则用户刚点完就被打回旧值，看着像「点了没反应」
             routeMode = m;
-            return true;
-        } catch (Exception ignored) {
-            return false;
+            if (m == pendingRoute) {
+                pendingRoute = 0;
+                pendingTries = 0;
+                postRouteResult(m, true);
+            }
+            return;
         }
+        updateRouteMode(m);
+    }
+
+    /** 重发了好几轮电脑都没认，放弃并把结果告诉界面（让它把选项还原） */
+    private void failPending() {
+        final int want = pendingRoute;
+        pendingRoute = 0;
+        pendingTries = 0;
+        postRouteResult(want, false);
+    }
+
+    private void postRouteResult(final int m, final boolean ok) {
+        ui.post(new Runnable() {
+            @Override
+            public void run() {
+                for (Listener l : listeners) l.onRouteResult(m, ok);
+            }
+        });
     }
 
     private void updateRouteMode(int m) {
