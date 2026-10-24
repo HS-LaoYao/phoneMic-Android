@@ -19,15 +19,6 @@ final class Prefs {
         sp(c).edit().putInt("mode", mode).apply();
     }
 
-    /** 是否播放电脑传来的声音（手机当耳机） */
-    static boolean getPlayRemote(Context c) {
-        return sp(c).getBoolean("playRemote", true);
-    }
-
-    static void setPlayRemote(Context c, boolean on) {
-        sp(c).edit().putBoolean("playRemote", on).apply();
-    }
-
     /** 发送键：Proto.SEND_ENTER / SEND_SHIFT_ENTER */
     static int getSendKey(Context c) {
         return sp(c).getInt("sendKey", Proto.SEND_ENTER);

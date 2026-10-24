@@ -145,23 +145,49 @@
                 android:textColor="@color/sub"
                 android:textSize="11sp" />
 
-            <!-- 播放电脑的声音 -->
-            <CheckBox
-                android:id="@+id/chkRemote"
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:layout_marginTop="14dp"
-                android:buttonTint="@color/accent"
-                android:text="@string/label_remote"
-                android:textColor="@color/text"
-                android:textSize="14sp" />
-
+            <!-- 电脑端模式（远程切换，心跳应答会同步回来） -->
             <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="18dp"
+                android:text="@string/label_route"
+                android:textColor="@color/sub"
+                android:textSize="12sp" />
+
+            <RadioGroup
+                android:id="@+id/rgRoute"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:text="@string/remote_hint"
-                android:textColor="@color/sub"
-                android:textSize="11sp" />
+                android:layout_marginTop="4dp"
+                android:orientation="vertical">
+
+                <RadioButton
+                    android:id="@+id/rbMic"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:buttonTint="@color/accent"
+                    android:text="@string/route_mic"
+                    android:textColor="@color/text"
+                    android:textSize="14sp" />
+
+                <RadioButton
+                    android:id="@+id/rbMonitor"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:buttonTint="@color/accent"
+                    android:text="@string/route_monitor"
+                    android:textColor="@color/text"
+                    android:textSize="14sp" />
+
+                <RadioButton
+                    android:id="@+id/rbHeadset"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:buttonTint="@color/accent"
+                    android:text="@string/route_headset"
+                    android:textColor="@color/text"
+                    android:textSize="14sp" />
+            </RadioGroup>
 
             <!-- 电脑 -->
             <TextView

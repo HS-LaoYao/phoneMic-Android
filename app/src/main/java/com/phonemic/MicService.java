@@ -78,6 +78,24 @@ public class MicService extends Service implements Core.Listener {
     @Override
     public void onLevel(float level) { }
 
+    /** 电脑端那边切了模式 → 发一条即看即走的通知（本地点的不会有，ACK 值一致时不会触发到这里） */
+    @Override
+    public void onRouteMode(int routeMode) {
+        String name;
+        switch (routeMode) {
+            case Proto.ROUTE_MONITOR: name = "② 麦克风 + 监听"; break;
+            case Proto.ROUTE_HEADSET: name = "③ 手机当音响"; break;
+            default: name = "① 仅麦克风"; break;
+        }
+        NotificationManager nm = getSystemService(NotificationManager.class);
+        nm.notify(NOTI_ID + 1, new Notification.Builder(this, CHANNEL)
+                .setContentTitle("phoneMic 模式已切换")
+                .setContentText(name)
+                .setSmallIcon(R.drawable.ic_notify)
+                .setAutoCancel(true)
+                .build());
+    }
+
     // ==================== 通知 ====================
 
     private void startForegroundCompat(Notification n) {

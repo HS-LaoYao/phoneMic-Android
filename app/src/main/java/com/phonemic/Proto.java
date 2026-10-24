@@ -13,10 +13,18 @@ public final class Proto {
     public static final byte T_PTT_DOWN = 0x10;     // 说话开始
     public static final byte T_PTT_UP = 0x11;       // 说话结束
     public static final byte T_HEARTBEAT = 0x12;    // [12][mode] 每秒
-    public static final byte T_ACK = 0x22;          // 电脑对心跳的应答 [22]
+    public static final byte T_ACK = 0x22;          // 电脑对心跳的应答 [22][当前路由模式]
     public static final byte T_AUDIO_DOWN = 0x02;   // 电脑→手机 的音频（手机当耳机时）
     public static final byte T_DISCOVER = 0x20;     // 广播找电脑
     public static final byte T_DISCOVER_ACK = 0x21; // [21][nameLen][name]
+
+    /** 远程切换电脑端模式 [14][mode:u8]（1~3） */
+    public static final byte T_MODE_SET = 0x14;
+
+    /** 路由模式（与电脑端 RouteMode 一致） */
+    public static final int ROUTE_MIC = 1;          // 仅麦克风
+    public static final int ROUTE_MONITOR = 2;      // 麦克风 + 监听
+    public static final int ROUTE_HEADSET = 3;      // 手机当音响
 
     /**
      * 「发送键」：[13][seq:u16][key:u8]

@@ -35,6 +35,8 @@ public final class Core {
     public interface Listener {
         void onState(int state, String pcName, String pcIp);
         void onLevel(float level);
+        /** 电脑端的路由模式变了（本地或远程切换都会通知，手机界面跟着同步） */
+        void onRouteMode(int routeMode);
     }
 
     private static Core instance;
@@ -69,7 +71,9 @@ public final class Core {
     private AudioTrack track;
     private Thread playThread;
     private final ArrayBlockingQueue<byte[]> playQ = new ArrayBlockingQueue<byte[]>(30);
-    private volatile boolean playRemote = true;
+
+    /** 电脑端当前的路由模式（由心跳应答带回，电脑是唯一事实来源） */
+    private volatile int routeMode = Proto.ROUTE_MIC;
 
     private volatile long lastAckAt = 0;
 
@@ -92,7 +96,6 @@ public final class Core {
             Log.e(TAG, "建 socket 失败", e);
             return;
         }
-        playRemote = Prefs.getPlayRemote(ctx);
         running = true;
         startNet();
         startAudio();
@@ -130,6 +133,7 @@ public final class Core {
         if (l != null && !listeners.contains(l)) listeners.add(l);
         l.onState(state, pcName, pcIp);
         l.onLevel(0f);
+        l.onRouteMode(routeMode);
     }
 
     public void removeListener(Listener l) {
@@ -267,8 +271,11 @@ public final class Core {
                             }
                         } else if (n >= 1 && buf[0] == Proto.T_ACK) {
                             lastAckAt = System.currentTimeMillis();
+                            // 应答第二字节是电脑端当前的路由模式：跟着它同步界面，
+                            // 这样在电脑上手切模式，手机这边也会跟着变
+                            if (n >= 2) updateRouteMode(buf[1] & 0xFF);
                         } else if (n > Proto.AUDIO_HEADER && buf[0] == Proto.T_AUDIO_DOWN) {
-                            if (playRemote) enqueueDown(buf, n);
+                            enqueueDown(buf, n);
                         }
                     } catch (java.net.SocketTimeoutException te) {
                         // 正常，继续循环
@@ -466,10 +473,35 @@ public final class Core {
 
     // ==================== 播放电脑的声音（模式③）====================
 
-    public void setPlayRemote(boolean on) {
-        playRemote = on;
-        if (ctx != null) Prefs.setPlayRemote(ctx, on);
-        if (!on) playQ.clear();
+    /** 手机端显示用的路由模式（来自电脑的心跳应答） */
+    public int getRouteMode() { return routeMode; }
+
+    /**
+     * 远程切换电脑端的路由模式（0x14）。
+     * 电脑每秒的心跳应答会带回真实模式（updateRouteMode），发错了会被纠正回来。
+     */
+    public boolean sendRouteMode(int m) {
+        if (pcAddr == null || m < 1 || m > 3) return false;
+        try {
+            byte[] pkt = new byte[]{Proto.T_MODE_SET, (byte) m};
+            sendTo(pkt, pkt.length, pcAddr);
+            // 先记下来：界面已经是用户点的状态了，等 ACK 带回同样的值就不再重复通知
+            routeMode = m;
+            return true;
+        } catch (Exception ignored) {
+            return false;
+        }
+    }
+
+    private void updateRouteMode(int m) {
+        if (m < 1 || m > 3 || m == routeMode) return;
+        routeMode = m;
+        ui.post(new Runnable() {
+            @Override
+            public void run() {
+                for (Listener l : listeners) l.onRouteMode(routeMode);
+            }
+        });
     }
 
     private void enqueueDown(byte[] buf, int n) {

@@ -10,8 +10,10 @@
     <string name="label_pc">电脑</string>
     <string name="btn_search">重新搜索</string>
 
-    <string name="label_remote">播放电脑的声音</string>
-    <string name="remote_hint">打开后：电脑放视频/音乐，手机里听得到（手机当耳机）</string>
+    <string name="label_route">电脑端模式（远程切换）</string>
+    <string name="route_mic">仅麦克风（电脑声音仍从音响出）</string>
+    <string name="route_monitor">麦克风 + 监听（音响同时播你的声音）</string>
+    <string name="route_headset">手机当音响（电脑声音全部从手机出）</string>
 
     <string name="voice_hold">按住 说话</string>
     <string name="label_send">发送到电脑</string>

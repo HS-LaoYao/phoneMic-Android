@@ -49,14 +49,17 @@ public class MainActivity extends Activity implements Core.Listener {
     private TextView tvBanner, tvBannerSub, tvPc, tvModeHint, tvSendKey;
     private Button btnTalk, btnVoice, btnSend;
     private ProgressBar level;
-    private RadioButton rbHold, rbToggle;
-    private RadioGroup rgMode;
+    private RadioButton rbHold, rbToggle, rbMic, rbMonitor, rbHeadset;
+    private RadioGroup rgMode, rgRoute;
 
     /** 用户希望服务是开着的吗（点过停止就是 false，回到前台时不再自动拉起） */
     private boolean serviceWanted = true;
 
     /** 松手后是不是要显示「语音 x.x″」气泡 */
     private boolean showVoiceBubble = false;
+
+    /** 正在同步路由模式的选中态（来自电脑的心跳应答），别把它当成用户的点击再发回去 */
+    private boolean routeSync = false;
 
     private final Handler ui = new Handler();
 
@@ -79,23 +82,18 @@ public class MainActivity extends Activity implements Core.Listener {
         rbHold = findViewById(R.id.rbHold);
         rbToggle = findViewById(R.id.rbToggle);
         rgMode = findViewById(R.id.rgMode);
+        rbMic = findViewById(R.id.rbMic);
+        rbMonitor = findViewById(R.id.rbMonitor);
+        rbHeadset = findViewById(R.id.rbHeadset);
+        rgRoute = findViewById(R.id.rgRoute);
         tvModeHint = findViewById(R.id.tvModeHint);
 
         setupMode();
+        setupRouteMode();
         setupTalkButton();
         setupVoiceBar();
         setupSend();
         setupMenu();
-
-        // 「播放电脑的声音」开关 —— 不绑的话它就只是个摆设，改了也不生效
-        android.widget.CheckBox chk = findViewById(R.id.chkRemote);
-        chk.setChecked(Prefs.getPlayRemote(this));
-        chk.setOnCheckedChangeListener(new android.widget.CompoundButton.OnCheckedChangeListener() {
-            @Override
-            public void onCheckedChanged(android.widget.CompoundButton b, boolean on) {
-                Core.get().setPlayRemote(on);
-            }
-        });
 
         findViewById(R.id.btnSearch).setBackground(round(C_CARD, 10));
         findViewById(R.id.btnSearch).setOnClickListener(new View.OnClickListener() {
@@ -185,6 +183,48 @@ public class MainActivity extends Activity implements Core.Listener {
                 : "点一下开始持续录音，再点一下停止");
     }
 
+    // ==================== 电脑端模式（远程切换）====================
+
+    private void setupRouteMode() {
+        checkRouteRadio(Core.get().getRouteMode());
+        rgRoute.setOnCheckedChangeListener(new RadioGroup.OnCheckedChangeListener() {
+            @Override
+            public void onCheckedChanged(RadioGroup group, int checkedId) {
+                if (routeSync) return;          // 这是电脑那边同步过来的，不是用户点的
+                int m = checkedId == R.id.rbMic ? Proto.ROUTE_MIC
+                        : checkedId == R.id.rbMonitor ? Proto.ROUTE_MONITOR
+                        : Proto.ROUTE_HEADSET;
+                if (!Core.get().sendRouteMode(m)) {
+                    toast("还没连上电脑，连上后再切");
+                    routeSync = true;
+                    checkRouteRadio(Core.get().getRouteMode());
+                    routeSync = false;
+                }
+            }
+        });
+    }
+
+    private void checkRouteRadio(int m) {
+        if (m == Proto.ROUTE_MIC) rbMic.setChecked(true);
+        else if (m == Proto.ROUTE_MONITOR) rbMonitor.setChecked(true);
+        else if (m == Proto.ROUTE_HEADSET) rbHeadset.setChecked(true);
+    }
+
+    /** 电脑端模式变了（本地或远程）：界面跟着变，横幅弹一下作为提示 */
+    @Override
+    public void onRouteMode(int m) {
+        routeSync = true;
+        checkRouteRadio(m);
+        routeSync = false;
+        banner.animate().scaleX(1.03f).scaleY(1.03f).setDuration(120)
+                .withEndAction(new Runnable() {
+                    @Override
+                    public void run() {
+                        banner.animate().scaleX(1f).scaleY(1f).setDuration(120).start();
+                    }
+                }).start();
+    }
+
     // ==================== 底部输入条：左边长按说话 ====================
 
     private void setupVoiceBar() {
@@ -269,7 +309,13 @@ public class MainActivity extends Activity implements Core.Listener {
     private void showSendKeyMenu(View anchor) {
         PopupMenu pm = new PopupMenu(this, anchor);
         String[] names = getResources().getStringArray(R.array.send_keys);
-        for (int i = 0; i < names.length; i++) pm.getMenu().add(0, i, 0, names[i]);
+        int cur = Prefs.getSendKey(this);
+        for (int i = 0; i < names.length; i++) {
+            MenuItem mi = pm.getMenu().add(0, i, 0, names[i]);
+            mi.setCheckable(true);
+            mi.setChecked(i == cur);          // 当前选中的那个打勾
+        }
+        pm.getMenu().setGroupCheckable(0, true, true);
         pm.setOnMenuItemClickListener(new PopupMenu.OnMenuItemClickListener() {
             @Override
             public boolean onMenuItemClick(MenuItem item) {
