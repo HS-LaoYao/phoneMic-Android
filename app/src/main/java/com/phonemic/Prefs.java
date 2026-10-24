@@ -37,13 +37,5 @@ final class Prefs {
         sp(c).edit().putInt("sendKey", v).apply();
     }
 
-    static String getLastIp(Context c) {
-        return sp(c).getString("lastIp", "");
-    }
-
-    static void setLastIp(Context c, String ip) {
-        sp(c).edit().putString("lastIp", ip).apply();
-    }
-
     private Prefs() { }
 }

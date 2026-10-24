@@ -71,7 +71,6 @@ public final class Core {
     private final ArrayBlockingQueue<byte[]> playQ = new ArrayBlockingQueue<byte[]>(30);
     private volatile boolean playRemote = true;
 
-    private long lastStateNotify = 0;
     private volatile long lastAckAt = 0;
 
     // 录音时长：给界面显示「语音 3.2″」那种气泡用
@@ -257,7 +256,6 @@ public final class Core {
                             pcIp = pcAddr.getHostAddress();
                             lastAckAt = System.currentTimeMillis();
                             Log.i(TAG, "找到电脑 " + pcName + " @ " + pcIp);
-                            if (ctx != null) Prefs.setLastIp(ctx, pcIp);
                             setState(ST_CONNECTED);
 
                             // 之前点过「开始」但当时没连上（或断线前正在说）→ 现在补上
@@ -468,8 +466,6 @@ public final class Core {
 
     // ==================== 播放电脑的声音（模式③）====================
 
-    public boolean isPlayRemote() { return playRemote; }
-
     public void setPlayRemote(boolean on) {
         playRemote = on;
         if (ctx != null) Prefs.setPlayRemote(ctx, on);
@@ -575,7 +571,6 @@ public final class Core {
     private void setState(int s) {
         if (state == s) return;
         state = s;
-        lastStateNotify = System.currentTimeMillis();
         ui.post(new Runnable() {
             @Override
             public void run() {

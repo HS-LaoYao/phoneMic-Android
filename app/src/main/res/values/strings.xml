@@ -16,7 +16,6 @@
     <string name="voice_hold">按住 说话</string>
     <string name="label_send">发送到电脑</string>
     <string name="btn_send">发送</string>
-    <string name="send_hint">电脑上按一次右边选的键。比如长按 Alt 说完语音后，点这里把文字发出去。</string>
     <string-array name="send_keys">
         <item>回车 Enter</item>
         <item>Shift + 回车</item>
@@ -35,7 +34,6 @@
 
     <string name="update_none">已经是最新版（%1$s）</string>
     <string name="update_found">发现新版本 %1$s，正在下载…</string>
-    <string name="update_downloaded">新版本 %1$s 已下载，点一下安装</string>
     <string name="update_fail">检查更新失败：%1$s</string>
     <string name="checking_update">正在检查更新…</string>
 </resources>

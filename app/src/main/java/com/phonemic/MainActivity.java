@@ -87,6 +87,16 @@ public class MainActivity extends Activity implements Core.Listener {
         setupSend();
         setupMenu();
 
+        // 「播放电脑的声音」开关 —— 不绑的话它就只是个摆设，改了也不生效
+        android.widget.CheckBox chk = findViewById(R.id.chkRemote);
+        chk.setChecked(Prefs.getPlayRemote(this));
+        chk.setOnCheckedChangeListener(new android.widget.CompoundButton.OnCheckedChangeListener() {
+            @Override
+            public void onCheckedChanged(android.widget.CompoundButton b, boolean on) {
+                Core.get().setPlayRemote(on);
+            }
+        });
+
         findViewById(R.id.btnSearch).setBackground(round(C_CARD, 10));
         findViewById(R.id.btnSearch).setOnClickListener(new View.OnClickListener() {
             @Override
@@ -179,39 +189,7 @@ public class MainActivity extends Activity implements Core.Listener {
 
     private void setupVoiceBar() {
         btnVoice.setBackground(round(C_CARD, 24));
-
-        btnVoice.setOnTouchListener(new View.OnTouchListener() {
-            @Override
-            public boolean onTouch(View v, MotionEvent e) {
-                if (Core.get().getMode() != Proto.MODE_HOLD) return false;
-                switch (e.getActionMasked()) {
-                    case MotionEvent.ACTION_DOWN:
-                        if (!connected()) { toast("还没连上电脑"); return true; }
-                        startRecord();
-                        return true;
-                    case MotionEvent.ACTION_UP:
-                    case MotionEvent.ACTION_CANCEL:
-                        stopRecord();
-                        return true;
-                }
-                return false;
-            }
-        });
-
-        btnVoice.setOnClickListener(new View.OnClickListener() {
-            @Override
-            public void onClick(View v) {
-                if (Core.get().getMode() != Proto.MODE_TOGGLE) return;
-                if (!connected() && !Core.get().isTalking()) {
-                    Core.get().setTalking(true);
-                    toast("还没连上电脑，连上后会自动开始录音");
-                    return;
-                }
-                if (Core.get().isTalking()) stopRecord();
-                else startRecord();
-            }
-        });
-
+        attachTalkHandlers(btnVoice);
         refreshVoiceBar();
         ui.postDelayed(ticker, 200);
     }
@@ -383,9 +361,14 @@ public class MainActivity extends Activity implements Core.Listener {
     // ==================== 大圆按钮 ====================
 
     private void setupTalkButton() {
-        btnTalk.setOnTouchListener(new View.OnTouchListener() {
+        attachTalkHandlers(btnTalk);
+    }
+
+    /** 大圆按钮和输入条左边的长按钮，行为完全一样 —— 同一套触摸/点击逻辑，别写两遍 */
+    private void attachTalkHandlers(View v) {
+        v.setOnTouchListener(new View.OnTouchListener() {
             @Override
-            public boolean onTouch(View v, MotionEvent e) {
+            public boolean onTouch(View view, MotionEvent e) {
                 if (Core.get().getMode() != Proto.MODE_HOLD) return false;
                 switch (e.getActionMasked()) {
                     case MotionEvent.ACTION_DOWN:
@@ -401,9 +384,9 @@ public class MainActivity extends Activity implements Core.Listener {
             }
         });
 
-        btnTalk.setOnClickListener(new View.OnClickListener() {
+        v.setOnClickListener(new View.OnClickListener() {
             @Override
-            public void onClick(View v) {
+            public void onClick(View view) {
                 if (Core.get().getMode() != Proto.MODE_TOGGLE) return;
                 if (!connected() && !Core.get().isTalking()) {
                     Core.get().setTalking(true);
